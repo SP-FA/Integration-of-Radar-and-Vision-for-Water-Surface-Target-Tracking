@@ -1,0 +1,9 @@
+data/*
+weights/*
+doc/*
+yolov8/
+WaterScenes-dev/*
+__pycache__/*
+*/__pycache__/*
+
+*.avi
