@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 
 from model.networks import MLP
-from util import DatasetLoader
+from util import DatasetLoader, NNDatasetLoader
 from tools.visualization import draw_plots
 
 
@@ -47,7 +47,7 @@ def train(mlp, train, test, epoch, save, device=torch.device("cpu")):
         train_loss_list.append(train_loss)
         val_loss_list.append(val_loss)
 
-    draw_plots("Loss&acc.jpg", epoch-30, train_loss_list[30:], val_loss_list[30:])
+    draw_plots("Loss&acc.jpg", train_loss_list[30:], val_loss_list[30:])
     torch.save(mlp.state_dict(), save)
 
 
@@ -56,9 +56,9 @@ if __name__ == "__main__":
     device = torch.device("cuda")
     batch_size = 512
 
-    dl = DatasetLoader("./data")
+    dl = NNDatasetLoader("./data")
     trainSet, testSet = dl.loadTrainTest(batch_size, 0.95, k=1, padding=False, device=device)
-    layers = [dl.input_dim, 32, 32, 16, dl.output_dim]  # k=1 [20, 32, 32, 8, 1]
+    layers = [dl.input_dim, 32, 32, 8, dl.output_dim]  # k=1 [20, 32, 32, 8, 1]
                                                         # k=2 [31, 32, 32, 8, 1]
                                                         # k=5 [  , 64, 32, 8, 1]
     model = MLP(layers, device)

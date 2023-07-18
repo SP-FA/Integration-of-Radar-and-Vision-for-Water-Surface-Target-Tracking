@@ -8,12 +8,11 @@ from registration import image_registration, point_cloud_registration
 from tools.stupid_tools import remove_outlier, map_label_to_color
 from util import DatasetLoader, NNDatasetLoader
 from model.networks import MLP, CNN
-from model.DBSCAN import DBSCAN
-from model.yoloIter import YOLOIterator
+from model.DBSCAN import VisionDBSCAN, DBSCAN
 
 
 def video2img(path, new_path):
-    cap = cv2.VideoCapture(path)  # 开启摄像头或者读取视频文件
+    cap = cv2.VideoCapture(path)
     nframes = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     namelst = os.listdir("./data/3")
@@ -41,14 +40,13 @@ class DrawPointsBase:
         (128, 128, 128),  # 灰色
         (0, 0, 0)  # 黑色 / 噪点
     ]
-    EPS = 35  # 邻域半径
+    EPS = 20  # 邻域半径
     MIN_SAMPLES = 4  # 最小邻域点数
 
-    def __init__(self, datasetPath, videoPath):
+    def __init__(self, videoPath):
         self._frame = None
         self.vPath = videoPath
-        self.dbscan = DBSCAN(eps=DrawPointsBase.EPS, min_samples=DrawPointsBase.MIN_SAMPLES)
-        self.yolo = YOLOIterator("./yolov8/yolov8_best.pt")
+        self.dbscan = VisionDBSCAN(eps=DrawPointsBase.EPS, min_samples=DrawPointsBase.MIN_SAMPLES)
 
 
     def _videoCaptureWriter(self, newPath):
@@ -64,16 +62,6 @@ class DrawPointsBase:
         return cap, out, nframes
 
 
-    def _postprocessing(self, points, pointlst, labellst):
-        pcd = remove_outlier(points)
-        points = np.asarray(pcd.points)  # [:, :2]
-        labels = self.dbscan.fit(points)
-        labels = map_label_to_color(labels)
-        pointlst.append(points[:, :2].astype(int))
-        labellst.append(labels)
-        return pointlst, labellst
-
-
     def _choose_method(self, method, i):
         """
         You should implement this method at every child class
@@ -85,17 +73,31 @@ class DrawPointsBase:
         cap, out, nframes = self._videoCaptureWriter(newPath)
         totalPoints = []
         totalLabels = []
-        for i in range(nframes):
+        totalxyxy = []
+        for i in tqdm(range(nframes)):
             _, self._frame = cap.read()
-            xyxy, conf = self.yolo.getBoxes(self._frame)
             points = self._choose_method(method, i)
-            totalPoints, totalLabels = self._postprocessing(points, totalPoints, totalLabels)
+
+            pcd = remove_outlier(points)
+            points = np.asarray(pcd.points)  # [:, :2]
+            labels = self.dbscan.vision_fit(points, self._frame)
+            xyxy = self.dbscan.xyxy
+            labels = map_label_to_color(labels)
+            totalPoints.append(points[:, :2].astype(int))
+            totalLabels.append(labels)
+            totalxyxy.append(xyxy)
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         for i in tqdm(range(len(totalPoints))):
             _, self._frame = cap.read()
             points = totalPoints[i]
             labels = totalLabels[i]
+            xyxy = totalxyxy[i]
+
+            if xyxy is not None:
+                for j in range(len(xyxy)):
+                    p = xyxy[j].astype(int)
+                    cv2.rectangle(self._frame, (p[0], p[1]), (p[2], p[3]), (0, 0, 255), 2)
 
             if points.shape[0] != 0:
                 u = points[:, 0]
@@ -110,7 +112,7 @@ class DrawPointsBase:
 
 class NaiveDrawPoints(DrawPointsBase):
     def __init__(self, datasetPath, videoPath, isCalib=False, fixHeight=False):
-        super().__init__(datasetPath, videoPath)
+        super().__init__(videoPath)
         self._lastFrame = None
         self.isCalib = isCalib
         self.fixHeight = fixHeight
@@ -160,7 +162,7 @@ class NaiveDrawPoints(DrawPointsBase):
 
 class NNDrawPoints(DrawPointsBase):
     def __init__(self, datasetPath, videoPath, modelPath='weights/mlp.pt', device=torch.device("cpu")):
-        super().__init__(datasetPath, videoPath)
+        super().__init__(videoPath)
         self.dataX = None
         self.trueU = None
         self.device = device
@@ -200,7 +202,7 @@ class NNDrawPoints(DrawPointsBase):
     def _predict(self, i, model):
         x = self.dataX[i]
         u = self.trueU[i]
-        z = x[:, 2].cpu().numpy()
+        z = x[:, 2].cpu().numpy() * 2
 
         model.eval()
         with torch.no_grad():
@@ -237,11 +239,11 @@ class NNDrawPoints(DrawPointsBase):
 
 
 if __name__ == "__main__":
-    original_video_path = './yolov8/runs/detect/track/Video.avi'
+    original_video_path = './yolov8/Video.avi'
     new_video_path = './data/new_point_img_5.avi'
 
     dp = NNDrawPoints('./data', original_video_path)
     dp.new_video(new_video_path, 'mlp')
 
     # nimgs = './data/point_img/'
-    # video2img(original_video_path, nimgs)
+    # video2img(new_video_path, nimgs)

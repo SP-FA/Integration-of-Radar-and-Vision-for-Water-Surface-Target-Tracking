@@ -248,7 +248,7 @@ class NNDatasetLoader(DatasetLoader):
             labelcsv = self.loadCSV(LABEL, i)
             v = labelcsv["v"].tolist()
             datay = np.array([v]).T  # [m, 1]
-            datay = self._padding_frames(datay) if padding else datay = torch.tensor(datay).to(device)
+            datay = self._padding_frames(datay) if padding else torch.tensor(datay).to(device)
             data_y.append(datay)
         if padding:
             data_y = np.array(data_y)
@@ -278,12 +278,10 @@ class NNDatasetLoader(DatasetLoader):
 
     def loadValid(self, padding=False, k=5, device=torch.device("cpu")):
         self._k = k
+        valid = self._frameX(True, padding, device)
         if padding:
-            valid = self._frameX(True, padding, device)
             valid = valid.permute(0, 2, 1)
             valid = torch.unsqueeze(valid, dim=1)
-        else:
-            valid = self._dataX(device)
         us = []
         csv = self.csv
         for i in csv:
