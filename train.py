@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 
 from model.networks import MLP
-from util import DatasetLoader, NNDatasetLoader
+from tools.util import DatasetLoader, NNDatasetLoader
 from tools.visualization import draw_plots
 
 
@@ -58,11 +58,11 @@ if __name__ == "__main__":
 
     dl = NNDatasetLoader("./data")
     trainSet, testSet = dl.loadTrainTest(batch_size, 0.95, k=1, padding=False, device=device)
-    layers = [dl.input_dim, 32, 32, 8, dl.output_dim]  # k=1 [20, 32, 32, 8, 1]
-                                                        # k=2 [31, 32, 32, 8, 1]
-                                                        # k=5 [  , 64, 32, 8, 1]
+    layers = [dl.input_dim, 32, 32, 8, dl.output_dim]  # k=1 [18, 32, 32, 8, 1]
+                                                       # k=2 [  , 32, 32, 8, 1]
+                                                       # k=5 [  , 64, 32, 8, 1]
     model = MLP(layers, device)
-    train(model, trainSet, testSet, epoch, "mlp.pt", device=device)
+    train(model, trainSet, testSet, epoch, "./weights/mlp_k1.pt", device=device)
 
     # model = CNN(20, 500, device)
     # train(model, trainSet, testSet, epoch, "cnn.pt", device=device)

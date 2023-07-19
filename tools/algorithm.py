@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def kalman(z, x_last=0, p_last=0, Q=0.1, R=8):
     """
     一维卡尔曼滤波算法
@@ -16,3 +19,11 @@ def kalman(z, x_last=0, p_last=0, Q=0.1, R=8):
     p_last = p_now
     return x_now, p_last
 
+
+def affine(x, y, H):
+    od = np.array([x, y, np.ones(x.shape[0])])  # [3, n]
+    transformed = np.matmul(H, od)
+    if H.shape[0] == 3:
+        transformed /= transformed[2]
+    transformed = np.round(transformed).astype(int)
+    return transformed

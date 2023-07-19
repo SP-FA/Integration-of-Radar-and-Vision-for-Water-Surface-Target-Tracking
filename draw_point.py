@@ -4,11 +4,11 @@ import torch
 import cv2
 import os
 
-from registration import image_registration, point_cloud_registration
+from tools.registration import image_registration, point_cloud_registration
 from tools.stupid_tools import remove_outlier, map_label_to_color
-from util import DatasetLoader, NNDatasetLoader
+from tools.util import DatasetLoader, NNDatasetLoader
 from model.networks import MLP, CNN
-from model.DBSCAN import VisionDBSCAN, DBSCAN
+from model.DBSCAN import VisionDBSCAN
 
 
 def video2img(path, new_path):
@@ -161,7 +161,7 @@ class NaiveDrawPoints(DrawPointsBase):
 
 
 class NNDrawPoints(DrawPointsBase):
-    def __init__(self, datasetPath, videoPath, modelPath='weights/mlp.pt', device=torch.device("cpu")):
+    def __init__(self, datasetPath, videoPath, modelPath='weights/mlp_k1.pt', device=torch.device("cpu")):
         super().__init__(videoPath)
         self.dataX = None
         self.trueU = None

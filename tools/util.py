@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 
 from torch.utils.data import TensorDataset, random_split, DataLoader
-from calibration import project_pcl_to_image
+from tools.calibration import project_pcl_to_image
 from model.kdTree import KDTree
 
 
@@ -106,7 +106,7 @@ class NNDatasetLoader(DatasetLoader):
         Call method loadTrainTest or loadValid at first.
         :return:
         """
-        return self._k * 11 + 9
+        return self._k * 9 + 9
 
 
     @property
@@ -129,8 +129,6 @@ class NNDatasetLoader(DatasetLoader):
         doppler = radarcsv["doppler"].tolist()
         azimuth = radarcsv["azimuth"].tolist()
         elevation = radarcsv["elevation"].tolist()
-        host_speed = radarcsv["host_speed"].tolist()
-        host_yaw = radarcsv["host_yaw"].tolist()
         comp_height = radarcsv["comp_height"].tolist()
         comp_velocity = radarcsv["comp_velocity"].tolist()
 
@@ -146,7 +144,7 @@ class NNDatasetLoader(DatasetLoader):
 
         if self._k == 1:
             datax = np.array([
-                x, y, z, rang, doppler, azimuth, elevation, host_speed, host_yaw, comp_height, comp_velocity,
+                x, y, z, rang, doppler, azimuth, elevation, comp_height, comp_velocity,
                 [pitch for _ in range(lenth)], [roll for _ in range(lenth)], [yaw for _ in range(lenth)],
                 [avx for _ in range(lenth)], [avy for _ in range(lenth)], [avz for _ in range(lenth)],
                 [lvx for _ in range(lenth)], [lvy for _ in range(lenth)], [lvz for _ in range(lenth)],
@@ -155,7 +153,7 @@ class NNDatasetLoader(DatasetLoader):
             datax = []
             imuVector = np.array([pitch, roll, yaw, avx, avy, avz, lvx, lvy, lvz])
             points = np.array([x, y, z]).T  # [m, 3]
-            fullRadars = np.array([x, y, z, rang, doppler, azimuth, elevation, host_speed, host_yaw, comp_height, comp_velocity]).T
+            fullRadars = np.array([x, y, z, rang, doppler, azimuth, elevation, comp_height, comp_velocity]).T
             kdt = KDTree(points, self._k)
             for i in range(points.shape[0]):
                 pointVector = np.empty(0)  # [1]

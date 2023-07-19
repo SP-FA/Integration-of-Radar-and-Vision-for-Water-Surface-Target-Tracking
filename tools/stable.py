@@ -2,8 +2,6 @@ import numpy as np
 import cv2
 from tqdm import tqdm
 
-from util import DatasetLoader
-
 
 def movingAverage(curve, radius):  # [n]
     windowSize = 2 * radius + 1
@@ -36,9 +34,7 @@ def stabilization(videoPath, savePath):
     # Pre-define transformation-store array
     transforms = np.zeros((nframes, 3), np.float32)
 
-    dataloader = DatasetLoader('./data')
     prevGray = None
-
     for i in tqdm(range(rightBound)):
         success, curr = cap.read()
         currGray = cv2.cvtColor(curr, cv2.COLOR_BGR2GRAY)
@@ -90,19 +86,7 @@ def stabilization(videoPath, savePath):
 
         m = cv2.getRotationMatrix2D((w / 2, h / 2), -np.rad2deg(da), 1)
         m[1, 2] += dy
-
-        # source = dataloader.load2DPoints(i)
-        # target = dataloader.load2DPoints(i - 3)
-        # x, y = point_cloud_registration(source, target)  # 使用 Point Cloud Registration
-
-        # points = dataloader.load2DPoints(i, isCalib=False, fixHeight=False)
-        #
         frameStabilized = cv2.warpAffine(frame, m, (w, h))
-        # x, y = points[:, 0], points[:, 1]
-        #
-        # for j in range(x.shape[0]):
-        #     cv2.circle(frameStabilized, (x[j], y[j]), 1, (102, 204, 255), 5)
-
         out.write(frameStabilized)
     out.release()
 
@@ -110,5 +94,4 @@ def stabilization(videoPath, savePath):
 if __name__ == "__main__":
     VideoPath = './data/3.avi'
     SavePath = 'video_out.avi'
-
     stabilization(VideoPath, SavePath)

@@ -2,14 +2,7 @@ import numpy as np
 import cv2 as cv
 import open3d as o3d
 
-
-def affine(x, y, H):
-    od = np.array([x, y, np.ones(x.shape[0])])  # [3, n]
-    transformed = np.matmul(H, od)
-    if H.shape[0] == 3:
-        transformed /= transformed[2]
-    transformed = np.round(transformed).astype(int)
-    return transformed
+from tools.algorithm import affine
 
 
 def image_registration(points, frame, lastFrame):
