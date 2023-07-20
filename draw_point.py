@@ -6,7 +6,7 @@ import os
 
 from tools.registration import image_registration, point_cloud_registration
 from tools.stupid_tools import remove_outlier, map_label_to_color
-from tools.util import DatasetLoader, NNDatasetLoader
+from util.load_data import DatasetLoader, NNDatasetLoader
 from model.networks import MLP, CNN
 from model.DBSCAN import VisionDBSCAN
 
@@ -14,7 +14,6 @@ from model.DBSCAN import VisionDBSCAN
 def video2img(path, new_path):
     cap = cv2.VideoCapture(path)
     nframes = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
     namelst = os.listdir("./data/3")
 
     for i in tqdm(range(nframes)):
@@ -48,7 +47,6 @@ class DrawPointsBase:
         self.vPath = videoPath
         self.dbscan = VisionDBSCAN(eps=DrawPointsBase.EPS, min_samples=DrawPointsBase.MIN_SAMPLES)
 
-
     def _videoCaptureWriter(self, newPath):
         cap = cv2.VideoCapture(self.vPath)
         nframes = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -78,8 +76,8 @@ class DrawPointsBase:
             _, self._frame = cap.read()
             points = self._choose_method(method, i)
 
-            pcd = remove_outlier(points)
-            points = np.asarray(pcd.points)  # [:, :2]
+            # pcd = remove_outlier(points)
+            # points = np.asarray(pcd.points)  # [:, :2]
             labels = self.dbscan.vision_fit(points, self._frame)
             xyxy = self.dbscan.xyxy
             labels = map_label_to_color(labels)
@@ -199,16 +197,16 @@ class NNDrawPoints(DrawPointsBase):
         return self.dataX, self.trueU
 
 
-    def _predict(self, i, model):
+    def _predict(self, i, model, modelPath):
         x = self.dataX[i]
         u = self.trueU[i]
-        z = x[:, 2].cpu().numpy() * 2
+        z = x[:, 2].cpu().numpy()
+        power = x[:, 3].cpu().numpy()
+        doppler = x[:, 5].cpu().numpy()
 
-        model.eval()
-        with torch.no_grad():
-            y = model(x)
-            v = y[:, 0].cpu().numpy()
-        return np.array([u, v, z]).T
+        y = model.predict(x, modelPath)
+        v = y[:, 0].cpu().numpy()
+        return np.array([u, v, z, doppler, power]).T
 
 
     def _mlp(self, i):
@@ -217,9 +215,8 @@ class NNDrawPoints(DrawPointsBase):
         :param i:
         :return: [m, 3]
         """
-        mlp = MLP([self.dl.input_dim, 32, 32, 8, self.dl.output_dim], self.device)
-        mlp.load_state_dict(torch.load(self.modelPath))
-        return self._predict(i, mlp)
+        mlp = MLP("./cfg/mlp.json", self.device)
+        return self._predict(i, mlp, "./weights/mlp_k1.pt")
 
 
     def _cnn(self, i):
@@ -230,7 +227,7 @@ class NNDrawPoints(DrawPointsBase):
         """
         cnn = CNN(self.dl.input_dim, 500, self.device)
         cnn.load_state_dict(torch.load('cnn.pt'))
-        return self._predict(i, cnn)
+        return self._predict(i, cnn, "./weights/cnn_k1.pt")
 
 
     def new_video(self, newPath, method):
@@ -245,5 +242,5 @@ if __name__ == "__main__":
     dp = NNDrawPoints('./data', original_video_path)
     dp.new_video(new_video_path, 'mlp')
 
-    # nimgs = './data/point_img/'
-    # video2img(new_video_path, nimgs)
+    nimgs = './data/point_img/'
+    video2img(new_video_path, nimgs)

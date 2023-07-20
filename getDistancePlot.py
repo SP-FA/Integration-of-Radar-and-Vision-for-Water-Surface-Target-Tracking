@@ -13,6 +13,8 @@ files = os.listdir(csvPath)
 totDistLst = []
 for i in tqdm(files):
     df = pd.read_csv(os.path.join(csvPath, i))
+    # points = np.array([df['u'].tolist(), df['v'].tolist(), df['z'].tolist(),
+    #                    df["rcs"].tolist(), df["doppler"].tolist()]).T
     points = np.array([df['u'].tolist(), df['v'].tolist(), df['z'].tolist()]).T
     kdt = KDTree(points, 4)
 
@@ -21,6 +23,7 @@ for i in tqdm(files):
         totDist = -dist[0]
         totDistLst.append(totDist)
 
-totDistLst = sorted(totDistLst, reverse=True)
-totDistLst = totDistLst[:10000]
+totDistLst = sorted(totDistLst)
+# totDistLst = totDistLst[500000:]
+# print(totDistLst)
 draw_plots("k-distance", totDistLst, totDistLst)

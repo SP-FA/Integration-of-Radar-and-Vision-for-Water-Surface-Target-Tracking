@@ -106,12 +106,11 @@ class NNDatasetLoader(DatasetLoader):
         Call method loadTrainTest or loadValid at first.
         :return:
         """
-        return self._k * 9 + 9
+        return self._k * 10 + 9
 
 
     @property
-    def output_dim(self):
-        return 1
+    def output_dim(self): return 1
 
 
     def _get_features(self, radarcsv, imucsv):
@@ -125,6 +124,7 @@ class NNDatasetLoader(DatasetLoader):
         x = radarcsv["x"].tolist()
         y = radarcsv["y"].tolist()
         z = radarcsv["z"].tolist()
+        power = radarcsv["rcs"].tolist()
         rang = radarcsv["range"].tolist()
         doppler = radarcsv["doppler"].tolist()
         azimuth = radarcsv["azimuth"].tolist()
@@ -144,7 +144,7 @@ class NNDatasetLoader(DatasetLoader):
 
         if self._k == 1:
             datax = np.array([
-                x, y, z, rang, doppler, azimuth, elevation, comp_height, comp_velocity,
+                x, y, z, power, rang, doppler, azimuth, elevation, comp_height, comp_velocity,
                 [pitch for _ in range(lenth)], [roll for _ in range(lenth)], [yaw for _ in range(lenth)],
                 [avx for _ in range(lenth)], [avy for _ in range(lenth)], [avz for _ in range(lenth)],
                 [lvx for _ in range(lenth)], [lvy for _ in range(lenth)], [lvz for _ in range(lenth)],
@@ -153,7 +153,7 @@ class NNDatasetLoader(DatasetLoader):
             datax = []
             imuVector = np.array([pitch, roll, yaw, avx, avy, avz, lvx, lvy, lvz])
             points = np.array([x, y, z]).T  # [m, 3]
-            fullRadars = np.array([x, y, z, rang, doppler, azimuth, elevation, comp_height, comp_velocity]).T
+            fullRadars = np.array([x, y, z, power, rang, doppler, azimuth, elevation, comp_height, comp_velocity]).T
             kdt = KDTree(points, self._k)
             for i in range(points.shape[0]):
                 pointVector = np.empty(0)  # [1]

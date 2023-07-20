@@ -19,14 +19,14 @@ def remove_outlier(points):
 def map_label_to_color(arr):
     COLOR_NUMBER = 10
     numDict = {}
-    cnt = 0
+    cnt = 1
     for i in range(len(arr)):
-        if arr[i] == -1:
+        if arr[i] == 0:
             continue
         if arr[i] not in numDict:
             numDict[arr[i]] = cnt
             arr[i] = cnt
-            cnt = (cnt + 1) % COLOR_NUMBER
+            cnt = (cnt + 1) % COLOR_NUMBER + 1
         else:
             arr[i] = numDict[arr[i]]
     return arr
