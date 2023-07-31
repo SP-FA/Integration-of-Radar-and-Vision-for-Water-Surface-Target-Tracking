@@ -1,79 +1,69 @@
 import torch
 from torch import optim, nn
-from tqdm import tqdm
 
-from tools.visualization import draw_plots
-from util.load_cfg import ConfigureLoader
+from model.NetBase import NetBase
 from util.load_data import NNDatasetLoader
 
 
-class MLP:
-    def __init__(self, config, device=torch.device("cpu")):
-        self.cl = ConfigureLoader(config)
-        self.layers = self.cl.layers
-        self.layers.insert(0, self.input_dim)
-        self.layers.append(self.output_dim)
-        self.model = MLP_model(self.layers, device)
-        self.device = device
-        self._isLoaded = False
+class MLP(NetBase):
+    def __init__(self, **kwargs):
+        super().__init__(kwargs)
+        if "modelPath" in kwargs: self.model = torch.load(kwargs["modelPath"])
+        else:
+            layers = self.cl.layers
+            layers.insert(0, self.input_dim)
+            layers.append(self.output_dim)
+            self.model = MLP_model(layers, self.D)
 
-    @property
-    def input_dim(self): return self.cl.k * 10 + 9
-
-    @property
-    def output_dim(self): return 1
-
-    def train(self, datasetPath, epoch, savePath, lr=1e-2):
+    def _load_data(self, datasetPath):
         dl = NNDatasetLoader(datasetPath)
-        train, test = dl.loadTrainTest(self.cl.batch, 0.95, k=self.cl.k, padding=False, device=self.device)
-        optimizer = optim.Adam(params=self.model.parameters(), lr=lr)
-        loss_func = nn.MSELoss().to(self.device)
-        trainSize = len(train)
-        testSize = len(test)
-        train_loss_list = []
-        val_loss_list = []
+        return dl.loadTrainTest(self.cl.batch, 0.95, k=self.cl.k, padding=False, device=self.D)
 
-        for i_epoch in range(epoch):
-            totalTrainLoss = 0
-            totalTestLoss = 0
+    def _optim(self, lr):
+        return optim.Adam(params=self.model.parameters(), lr=lr)
 
-            self.model.train()
-            trainBar = tqdm(train)
-            for x, y in trainBar:
-                optimizer.zero_grad()
-                pred = self.model(x)
+    def _loss(self, predY, y):
+        lossFunc = nn.MSELoss().to(self.D)
+        return lossFunc(predY, y)
 
-                loss = loss_func(pred, y)
-                loss.backward()
-                optimizer.step()
-
-                totalTrainLoss += loss.item()
-                trainBar.set_description("[Train][Epoch: %d][loss: %d]" % (i_epoch, loss))
-            avgTrainLoss = totalTrainLoss / trainSize
-
-            self.model.eval()
-            testBar = tqdm(test)
-            for x, y in testBar:
-                optimizer.zero_grad()
-                pred = self.model(x)
-                loss = loss_func(pred, y)
-                totalTestLoss += loss.item()
-                testBar.set_description("[Test ][Epoch: %d][loss: %d]" % (i_epoch, loss))
-            avgTestLoss = totalTestLoss / testSize
-
-            train_loss_list.append(avgTrainLoss)
-            val_loss_list.append(avgTestLoss)
-        draw_plots("Loss&acc.jpg", train_loss_list[30:], val_loss_list[30:])
-        torch.save(self.model.state_dict(), savePath)
-
-
-    def predict(self, x, modelPath):
-        if not self._isLoaded:
-            self.model.load_state_dict(torch.load(modelPath))
-
-        self.model.eval()
-        with torch.no_grad():
-            return self.model(x)
+    # def train(self, datasetPath, epoch, savePath, lr=1e-2):
+    #     dl = NNDatasetLoader(datasetPath)
+    #     train, test = dl.loadTrainTest(self.cl.batch, 0.95, k=self.cl.k, padding=False, device=self.D)
+    #     optimizer = optim.Adam(params=self.model.parameters(), lr=lr)
+    #     lossFunc = nn.MSELoss().to(self.D)
+    #     train_loss_list = []
+    #     test_loss_list = []
+    #
+    #     for i_epoch in range(epoch):
+    #         totalTrainLoss = 0
+    #         totalTestLoss = 0
+    #
+    #         self.model.train()
+    #         pbar = track(train, description="Train---- %d/%d" % (i_epoch, epoch), style="white", complete_style="blue")
+    #         for x, y in pbar:
+    #             optimizer.zero_grad()
+    #             pred = self.model(x)
+    #
+    #             loss = lossFunc(pred, y)
+    #             loss.backward()
+    #             optimizer.step()
+    #
+    #             totalTrainLoss += loss.item()
+    #         avgTrainLoss = totalTrainLoss / len(train)
+    #
+    #         self.model.eval()
+    #         pbar = track(train, description="Test----- %d/%d" % (i_epoch, epoch), style="white", complete_style="blue")
+    #         for x, y in pbar:
+    #             optimizer.zero_grad()
+    #             pred = self.model(x)
+    #             loss = lossFunc(pred, y)
+    #             totalTestLoss += loss.item()
+    #         avgTestLoss = totalTestLoss / len(test)
+    #
+    #         train_loss_list.append(avgTrainLoss)
+    #         test_loss_list.append(avgTestLoss)
+    #     draw_plots("Loss&acc.jpg", train_loss_list[30:], test_loss_list[30:])
+    #     torch.save(self.model.state_dict(), savePath)
 
 
 class MLP_model(nn.Module):
@@ -86,9 +76,9 @@ class MLP_model(nn.Module):
             relu = nn.ReLU(inplace=True).to(device)
             nn.init.kaiming_uniform_(linear.weight, a=0, mode='fan_in', nonlinearity='relu')
 
-            self.layers.add_module("Linear%d" % (i), linear)
-            self.layers.add_module("BatchNorm%d" % (i), batchnorm)
-            self.layers.add_module("ReLU%d" % (i), relu)
+            self.layers.add_module("Linear%d" % i, linear)
+            self.layers.add_module("BatchNorm%d" % i, batchnorm)
+            self.layers.add_module("ReLU%d" % i, relu)
 
         linear = nn.Linear(layers[-2], layers[-1]).to(device)
         nn.init.kaiming_uniform_(linear.weight, a=0, mode='fan_in', nonlinearity='relu')
@@ -121,7 +111,6 @@ class CNN(nn.Module):
             nn.BatchNorm1d(512),
             nn.Linear(512, output)
         ).to(device)
-
 
     def forward(self, x):
         x = self.conv_layers(x)

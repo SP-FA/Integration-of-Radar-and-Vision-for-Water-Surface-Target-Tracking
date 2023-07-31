@@ -1,0 +1,6 @@
+{
+	"k": 1,
+	"batch_size": 256,
+	"global_feature": false,
+	"use_feature_trans": false
+}

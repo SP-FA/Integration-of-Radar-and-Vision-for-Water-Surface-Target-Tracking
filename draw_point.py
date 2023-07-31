@@ -3,7 +3,10 @@ import numpy as np
 import torch
 import cv2
 import os
+from rich.progress import track
 
+from abc import ABC, abstractmethod
+from model.pointNet import PointNet
 from tools.registration import image_registration, point_cloud_registration
 from tools.stupid_tools import remove_outlier, map_label_to_color
 from util.load_data import DatasetLoader, NNDatasetLoader
@@ -16,7 +19,7 @@ def video2img(path, new_path):
     nframes = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     namelst = os.listdir("./data/3")
 
-    for i in tqdm(range(nframes)):
+    for i in track(range(nframes), description="[blue]Video -> Img", style="white", complete_style="blue"):
         _, frame = cap.read()
         if cv2.waitKey(1) == ord('q'):
             break
@@ -42,7 +45,7 @@ class DrawPointsBase:
     EPS = 20  # 邻域半径
     MIN_SAMPLES = 4  # 最小邻域点数
 
-    def __init__(self, videoPath):
+    def __init__(self, videoPath, device):
         self._frame = None
         self.vPath = videoPath
         self.dbscan = VisionDBSCAN(eps=DrawPointsBase.EPS, min_samples=DrawPointsBase.MIN_SAMPLES)
@@ -59,42 +62,48 @@ class DrawPointsBase:
         out = cv2.VideoWriter(newPath, cv2.VideoWriter_fourcc(*'mp4v'), fps, size)
         return cap, out, nframes
 
-
-    def _choose_method(self, method, i):
-        """
-        You should implement this method at every child class
-        """
-        raise RuntimeError("You should implement this method at every child class")
-
+    @abstractmethod
+    def _choose_method(self, method, i): pass
 
     def new_video(self, newPath, method):
         cap, out, nframes = self._videoCaptureWriter(newPath)
         totalPoints = []
         totalLabels = []
         totalxyxy = []
+        # track(range(nframes), description="[#66CCFF]STEP [purple]1")
         for i in tqdm(range(nframes)):
             _, self._frame = cap.read()
             points = self._choose_method(method, i)
-
+            pointIndex = np.where(points[:, -1] != 0)
+            points = points[pointIndex]
             # pcd = remove_outlier(points)
             # points = np.asarray(pcd.points)  # [:, :2]
             labels = self.dbscan.vision_fit(points, self._frame)
-            xyxy = self.dbscan.xyxy
+            # if self.dbscan.xyxy is not None:
+            #     xyxy = self.dbscan.xyxy.to(torch.int)
+            # else:
+            #     xyxy = None
+            totalxyxy.append(self.dbscan.xyxy)
             labels = map_label_to_color(labels)
+            # totalPoints.append(points[:, :2].astype(int))
             totalPoints.append(points[:, :2].astype(int))
             totalLabels.append(labels)
-            totalxyxy.append(xyxy)
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        for i in tqdm(range(len(totalPoints))):
+        pbar = track(range(len(totalPoints)), description="[#66CCFF]STEP [purple]2", style="white", complete_style="#66CCFF")
+        for i in pbar:
             _, self._frame = cap.read()
-            points = totalPoints[i]
-            labels = totalLabels[i]
-            xyxy = totalxyxy[i]
+            # points = totalPoints[i]
+            # labels = totalLabels[i]
+            # xyxy = totalxyxy[i]
+
+            points = np.array(totalPoints[i]).astype(int)
+            labels = np.array(totalLabels[i]).astype(int)
+            xyxy = np.array(totalxyxy[i]).astype(int)
 
             if xyxy is not None:
                 for j in range(len(xyxy)):
-                    p = xyxy[j].astype(int)
+                    p = xyxy[j]
                     cv2.rectangle(self._frame, (p[0], p[1]), (p[2], p[3]), (0, 0, 255), 2)
 
             if points.shape[0] != 0:
@@ -109,13 +118,12 @@ class DrawPointsBase:
 
 
 class NaiveDrawPoints(DrawPointsBase):
-    def __init__(self, datasetPath, videoPath, isCalib=False, fixHeight=False):
-        super().__init__(videoPath)
+    def __init__(self, datasetPath, videoPath, isCalib=False, fixHeight=False, device=torch.cpu):
+        super().__init__(videoPath, device)
         self._lastFrame = None
         self.isCalib = isCalib
         self.fixHeight = fixHeight
         self.dl = DatasetLoader(datasetPath)
-
 
     def _choose_method(self, method, i):
         """
@@ -130,17 +138,12 @@ class NaiveDrawPoints(DrawPointsBase):
         if self._lastFrame is None or method == 'none':
             points = self.dl.load2DPoints(i, self.isCalib, self.fixHeight)
         else:
-            if method == 'img':
-                points = self._img_reg(i)
-
-            elif method == 'point':
-                points = self._point_reg(i)
-
+            if   method == 'img':   points = self._img_reg(i)
+            elif method == 'point': points = self._point_reg(i)
             elif method == 'both':
                 points = self._point_reg(i)
                 points = self._img_reg(i, points)
-            else:
-                raise ValueError("parameter 'method' error")
+            else: raise ValueError("parameter 'method' error")
         self._lastFrame = self._frame
         return points
 
@@ -160,7 +163,10 @@ class NaiveDrawPoints(DrawPointsBase):
 
 class NNDrawPoints(DrawPointsBase):
     def __init__(self, datasetPath, videoPath, modelPath='weights/mlp_k1.pt', device=torch.device("cpu")):
-        super().__init__(videoPath)
+        super().__init__(videoPath, device)
+        self.cnn = None
+        self.mlp = None
+        self.net = None
         self.dataX = None
         self.trueU = None
         self.device = device
@@ -174,40 +180,52 @@ class NNDrawPoints(DrawPointsBase):
             - 'none'
             - 'mlp'
             - 'cnn'
+            - 'pointnet'
         :param i:
         :return: [n, 3]
         """
-        if method == 'mlp':
-            points = self._mlp(i)
-        elif method == 'cnn':
-            points = self._cnn(i)
-        elif method == 'none':
-            points = self.dl.load2DPoints(i, isCalib=False, fixHeight=False)
-        else:
-            raise ValueError("parameter 'method' error")
+        if   method == 'mlp':       points = self._mlp(i)
+        elif method == 'cnn':       points = self._cnn(i)
+        elif method == 'pointnet':  points = self._pointNet(i)
+        elif method == 'none':      points = self.dl.load2DPoints(i, isCalib=False, fixHeight=False)
+        else:                       raise ValueError("parameter 'method' error")
         return points
 
 
     def _load_data(self, method):
         if self.dataX is None:
-            if method == 'mlp':
-                self.dataX, self.trueU = self.dl.loadValid(False, 1, self.device)
-            if method == 'cnn':
-                self.dataX, self.trueU = self.dl.loadValid(True, 1, self.device)
+            if method == 'mlp':      self.dataX, self.trueU = self.dl.loadValid(False, 1, self.device)
+            if method == 'cnn':      self.dataX, self.trueU = self.dl.loadValid(True , 1, self.device)
+            if method == 'pointnet': self.dataX, self.trueU = self.dl.loadValid(True , 1, self.device)
         return self.dataX, self.trueU
 
 
-    def _predict(self, i, model, modelPath):
+    def _predict(self, i, model):
         x = self.dataX[i]
         u = self.trueU[i]
         z = x[:, 2].cpu().numpy()
         power = x[:, 3].cpu().numpy()
         doppler = x[:, 5].cpu().numpy()
 
-        y = model.predict(x, modelPath)
+        y, _, _ = model.predict(x)
         v = y[:, 0].cpu().numpy()
         return np.array([u, v, z, doppler, power]).T
 
+    def _predict_pointnet(self, i, model):
+        x = self.dataX[i]
+        u = self.trueU[i]
+        z = x[:, 2].cpu().numpy()
+        power = x[:, 3].cpu().numpy()
+        doppler = x[:, 5].cpu().numpy()
+
+        z = z.flatten()
+        power = power.flatten()
+        doppler = doppler.flatten()
+
+        y, _, _ = model.predict(x)
+        y = y.view(-1, 1)
+        v = y[:, 0].cpu().numpy()
+        return np.array([u, v, z, doppler, power]).T
 
     def _mlp(self, i):
         """
@@ -215,8 +233,9 @@ class NNDrawPoints(DrawPointsBase):
         :param i:
         :return: [m, 3]
         """
-        mlp = MLP("./cfg/mlp.json", self.device)
-        return self._predict(i, mlp, "./weights/mlp_k1.pt")
+        if self.mlp is None:
+            self.mlp = MLP(modelPath="./weights/mlp_k1.pt", device=self.device)
+        return self._predict(i, self.mlp)
 
 
     def _cnn(self, i):
@@ -225,9 +244,16 @@ class NNDrawPoints(DrawPointsBase):
         :param i:
         :return: [500, 3]
         """
-        cnn = CNN(self.dl.input_dim, 500, self.device)
-        cnn.load_state_dict(torch.load('cnn.pt'))
-        return self._predict(i, cnn, "./weights/cnn_k1.pt")
+        if self.cnn is None:
+            self.cnn = CNN(self.dl.input_dim, 500, self.device)
+            self.cnn.load_state_dict(torch.load("./weights/cnn_k1.pt"))
+        return self._predict(i, self.cnn)
+
+
+    def _pointNet(self, i):
+        if self.net is None:
+            self.net = PointNet(modelPath="./weights/pointNet.pt", device=self.device)
+        return self._predict_pointnet(i, self.net)
 
 
     def new_video(self, newPath, method):
@@ -239,8 +265,8 @@ if __name__ == "__main__":
     original_video_path = './yolov8/Video.avi'
     new_video_path = './data/new_point_img_5.avi'
 
-    dp = NNDrawPoints('./data', original_video_path)
-    dp.new_video(new_video_path, 'mlp')
+    dp = NNDrawPoints('./data', original_video_path, device=torch.device("cuda"))
+    dp.new_video(new_video_path, 'pointnet')
 
-    nimgs = './data/point_img/'
-    video2img(new_video_path, nimgs)
+    # nimgs = './data/point_img/'
+    # video2img(new_video_path, nimgs)

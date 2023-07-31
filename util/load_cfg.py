@@ -8,6 +8,8 @@ class ConfigureLoader:
 
         if "mlp.json" in path:
             self._load_mlp_cfg(cfg)
+        elif "pointNet.json" in path:
+            self._load_pointNet_cfg(cfg)
         else:
             self.__loader__(cfg)
 
@@ -25,11 +27,19 @@ class ConfigureLoader:
         self._layers = cfg["layers"]
         self._batch = cfg["batch_size"]
 
+    def _load_pointNet_cfg(self, cfg):
+        self._k = cfg["k"]
+        self._batch = cfg["batch_size"]
+        self._globalFeature = cfg["global_feature"]
+        self._useFeatureTrans = cfg["use_feature_trans"]
+
     @property
     def k(self): return self._k
-
     @property
     def layers(self): return self._layers
-
     @property
     def batch(self): return self._batch
+    @property
+    def globalFeature(self): return self._globalFeature
+    @property
+    def useFeatureTrans(self): return self._useFeatureTrans

@@ -12,7 +12,7 @@ def draw_plot(train_data, test_data, train_label, test_label, title, xlabel, yla
 
 def draw_plots(name, train_loss_list, val_loss_list):
     epoch = len(train_loss_list)
-    plt.figure(figsize=(20, 5))
+    plt.figure(figsize=(20, 20))
 
     plt.subplot(2, 1, 1)
     draw_plot(train_loss_list, val_loss_list, "train_loss Line", "val_loss Line", "Loss_curve", "Epochs", "Loss", epoch)

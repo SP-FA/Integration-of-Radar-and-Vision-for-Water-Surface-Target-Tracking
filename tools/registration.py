@@ -41,7 +41,7 @@ def _img_reg(img1, img2, id=None):
     # 旋转测试
     good_matches = []
     for m, n in matches:
-        if m.distance < 0.75 * n.distance:
+        if m._distance < 0.75 * n._distance:
             good_matches.append([m])
 
     # 选择匹配关键点

@@ -2,9 +2,10 @@ import os
 import pandas as pd
 import numpy as np
 import torch
-from tqdm import tqdm
+from rich.progress import track
 
 from torch.utils.data import TensorDataset, random_split, DataLoader
+
 from tools.calibration import project_pcl_to_image
 from model.kdTree import KDTree
 
@@ -190,8 +191,9 @@ class NNDatasetLoader(DatasetLoader):
         """
         data_x = np.empty([1, self.input_dim])
         csv = os.listdir(self._labelPath)
-        pbar = tqdm(csv)
-        pbar.set_description("[Loading data]")
+        # pbar = tqdm(csv)
+        # pbar.set_description("[Loading data]")
+        pbar = track(csv, description="[blue]Loading data", style="white", complete_style="blue")
         for file in pbar:
             radarcsv = self.loadCSV(RADAR, file)
             imucsv = self.loadCSV(IMU, file)
@@ -224,14 +226,14 @@ class NNDatasetLoader(DatasetLoader):
         """
         data_x = []
         csv = self.csv if isValid else os.listdir(self._labelPath)
-        pbar = tqdm(csv)
-        pbar.set_description("[Loading data]")
+        pbar = track(csv, description="[blue]Loading data", complete_style="blue", style="white")
         for i in pbar:
             radarcsv = self.loadCSV(RADAR, i)
             imucsv = self.loadCSV(IMU, i)
             datax = self._get_features(radarcsv, imucsv)
             datax = self._padding_frames(datax) if padding else torch.tensor(datax).to(torch.float32).to(device)
             data_x.append(datax)
+            # prog.update(pbar, description=desc, advance=1)
         if padding:
             data_x = np.array(data_x)
             return torch.tensor(data_x).to(torch.float32).to(device)
