@@ -58,7 +58,6 @@ def square_distance(X1, X2):
     dist += torch.sum(X1 ** 2, -1).view(B, N, 1)
     dist += torch.sum(X2 ** 2, -1).view(B, 1, M)
     if dist.shape[0] == 1: dist = dist.squeeze(0)
-    dist = torch.sqrt(dist)
     return dist
 
 

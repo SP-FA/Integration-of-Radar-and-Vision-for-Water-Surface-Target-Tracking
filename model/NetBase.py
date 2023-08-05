@@ -15,7 +15,7 @@ class NetBase(ABC):
         self.model.eval()
         with torch.no_grad(): return self.model(x)
 
-    def train(self, datasetPath, epoch, savePath, lr=1e-3):
+    def train(self, datasetPath, epoch, savePath, resultPath, lr=1e-3):
         train, test = self._load_data(datasetPath)
         optimizer = self._optim(lr)
         train_loss_list = []
@@ -50,7 +50,7 @@ class NetBase(ABC):
 
             train_loss_list.append(avgTrainLoss)
             test_loss_list.append(avgTestLoss)
-        draw_plots("Loss.jpg", train_loss_list, test_loss_list)
+        draw_plots(resultPath, train_loss_list, test_loss_list)
         torch.save(self.model, savePath)
 
     @property

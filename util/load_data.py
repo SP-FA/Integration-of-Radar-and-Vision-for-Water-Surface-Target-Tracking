@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import torch
 from rich.progress import track
-
 from torch.utils.data import TensorDataset, random_split, DataLoader
 
 from tools.calibration import project_pcl_to_image
@@ -13,7 +12,7 @@ from model.kdTree import KDTree
 IMU = "imu"
 CALIB = "calib"
 LABEL = "label"
-RADAR = "radar_3"
+RADAR = "radar"
 
 
 def getIndex(arr, point):
@@ -22,11 +21,11 @@ def getIndex(arr, point):
 
 
 class DatasetLoader:
-    _csvList = None
     _maxPoints = 500
 
     def __init__(self, datasetPath):
         self._path = datasetPath
+        self._csvList = None
         self._radarPath = os.path.join(self._path, RADAR)
         self._imuPath = os.path.join(self._path, IMU)
         self._calib = os.listdir(os.path.join(self._path, CALIB))[0]
@@ -39,9 +38,9 @@ class DatasetLoader:
 
     @property
     def csv(self):
-        if DatasetLoader._csvList is None:
-            DatasetLoader._csvList = os.listdir(os.path.join(self._path, IMU))
-        return DatasetLoader._csvList
+        if self._csvList is None:
+            self._csvList = os.listdir(os.path.join(self._path, IMU))
+        return self._csvList
 
 
     def loadMatrix(self):
@@ -100,7 +99,6 @@ class NNDatasetLoader(DatasetLoader):
         self._labelPath = os.path.join(self._path, LABEL)
         self._k = None
 
-
     @property
     def input_dim(self):
         """
@@ -109,17 +107,15 @@ class NNDatasetLoader(DatasetLoader):
         """
         return self._k * 10 + 9
 
-
     @property
     def output_dim(self): return 1
-
 
     def _get_features(self, radarcsv, imucsv):
         """
 
         :param radarcsv:
         :param imucsv:
-        :return: [m, k * 11 + 9]
+        :return: [m, k * 10 + 9]
         """
         lenth = radarcsv.shape[0]
         x = radarcsv["x"].tolist()
@@ -156,14 +152,14 @@ class NNDatasetLoader(DatasetLoader):
             points = np.array([x, y, z]).T  # [m, 3]
             fullRadars = np.array([x, y, z, power, rang, doppler, azimuth, elevation, comp_height, comp_velocity]).T
             kdt = KDTree(points, self._k)
-            for i in range(points.shape[0]):
+            for i in points:
                 pointVector = np.empty(0)  # [1]
-                nps, _ = kdt.search_nearest(i, isInner=True)
+                nps, _ = kdt.search_nearest(i)
                 if len(nps) < self._k:
-                    pointVector = np.zeros((self._k - len(nps)) * 11)
+                    pointVector = np.zeros((self._k - len(nps)) * 10)
                 for j in nps:
                     index = getIndex(points, j)
-                    pointVector = np.concatenate((pointVector, fullRadars[index]))  # [k * 11]
+                    pointVector = np.concatenate((pointVector, fullRadars[index]))  # [k * input_dim]
                 pointVector = np.concatenate((pointVector, imuVector))
                 datax.append(pointVector)
             datax = np.array(datax)

@@ -7,7 +7,7 @@ from tqdm import tqdm
 from model.kdTree import KDTree
 from tools.visualization import draw_plots
 
-csvPath = "./data/radar_3"
+csvPath = "./data/radar"
 files = os.listdir(csvPath)
 
 totDistLst = []

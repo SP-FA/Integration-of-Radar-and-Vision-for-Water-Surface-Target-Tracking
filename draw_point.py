@@ -11,7 +11,7 @@ from tools.registration import image_registration, point_cloud_registration
 from tools.stupid_tools import remove_outlier, map_label_to_color
 from util.load_data import DatasetLoader, NNDatasetLoader
 from model.networks import MLP, CNN
-from model.DBSCAN import VisionDBSCAN
+from model.DBSCAN import ConditionalDBSCAN
 
 
 def video2img(path, new_path):
@@ -48,7 +48,7 @@ class DrawPointsBase:
     def __init__(self, videoPath, device):
         self._frame = None
         self.vPath = videoPath
-        self.dbscan = VisionDBSCAN(eps=DrawPointsBase.EPS, min_samples=DrawPointsBase.MIN_SAMPLES)
+        self.dbscan = ConditionalDBSCAN(eps=DrawPointsBase.EPS, min_samples=DrawPointsBase.MIN_SAMPLES)
 
     def _videoCaptureWriter(self, newPath):
         cap = cv2.VideoCapture(self.vPath)
@@ -74,18 +74,14 @@ class DrawPointsBase:
         for i in tqdm(range(nframes)):
             _, self._frame = cap.read()
             points = self._choose_method(method, i)
-            pointIndex = np.where(points[:, -1] != 0)
+            pointIndex = np.where(points[:, 0] != 0)
             points = points[pointIndex]
             # pcd = remove_outlier(points)
             # points = np.asarray(pcd.points)  # [:, :2]
-            labels = self.dbscan.vision_fit(points, self._frame)
-            # if self.dbscan.xyxy is not None:
-            #     xyxy = self.dbscan.xyxy.to(torch.int)
-            # else:
-            #     xyxy = None
+            labels = self.dbscan.conditional_fit(points, self._frame)
+            labels = np.array(labels).astype(int)
             totalxyxy.append(self.dbscan.xyxy)
             labels = map_label_to_color(labels)
-            # totalPoints.append(points[:, :2].astype(int))
             totalPoints.append(points[:, :2].astype(int))
             totalLabels.append(labels)
 
@@ -93,15 +89,12 @@ class DrawPointsBase:
         pbar = track(range(len(totalPoints)), description="[#66CCFF]STEP [purple]2", style="white", complete_style="#66CCFF")
         for i in pbar:
             _, self._frame = cap.read()
-            # points = totalPoints[i]
-            # labels = totalLabels[i]
-            # xyxy = totalxyxy[i]
-
             points = np.array(totalPoints[i]).astype(int)
             labels = np.array(totalLabels[i]).astype(int)
-            xyxy = np.array(totalxyxy[i]).astype(int)
+            xyxy = totalxyxy[i]
 
             if xyxy is not None:
+                xyxy = np.array(xyxy).astype(int)
                 for j in range(len(xyxy)):
                     p = xyxy[j]
                     cv2.rectangle(self._frame, (p[0], p[1]), (p[2], p[3]), (0, 0, 255), 2)
@@ -118,7 +111,8 @@ class DrawPointsBase:
 
 
 class NaiveDrawPoints(DrawPointsBase):
-    def __init__(self, datasetPath, videoPath, isCalib=False, fixHeight=False, device=torch.cpu):
+    def __init__(self, datasetPath, isCalib=False, fixHeight=False, device=torch.cpu):
+        videoPath = os.path.join(datasetPath, "Video.avi")
         super().__init__(videoPath, device)
         self._lastFrame = None
         self.isCalib = isCalib
@@ -140,6 +134,7 @@ class NaiveDrawPoints(DrawPointsBase):
         else:
             if   method == 'img':   points = self._img_reg(i)
             elif method == 'point': points = self._point_reg(i)
+            elif method == 'none':  points = self.dl.load2DPoints(i, self.isCalib, self.fixHeight)
             elif method == 'both':
                 points = self._point_reg(i)
                 points = self._img_reg(i, points)
@@ -162,7 +157,8 @@ class NaiveDrawPoints(DrawPointsBase):
 
 
 class NNDrawPoints(DrawPointsBase):
-    def __init__(self, datasetPath, videoPath, modelPath='weights/mlp_k1.pt', device=torch.device("cpu")):
+    def __init__(self, datasetPath, modelPath='weights/mlp_k1.pt', device=torch.device("cpu")):
+        videoPath = os.path.join(datasetPath, "Video.avi")
         super().__init__(videoPath, device)
         self.cnn = None
         self.mlp = None
@@ -175,19 +171,9 @@ class NNDrawPoints(DrawPointsBase):
 
 
     def _choose_method(self, method, i):
-        """
-        :param method:
-            - 'none'
-            - 'mlp'
-            - 'cnn'
-            - 'pointnet'
-        :param i:
-        :return: [n, 3]
-        """
         if   method == 'mlp':       points = self._mlp(i)
         elif method == 'cnn':       points = self._cnn(i)
         elif method == 'pointnet':  points = self._pointNet(i)
-        elif method == 'none':      points = self.dl.load2DPoints(i, isCalib=False, fixHeight=False)
         else:                       raise ValueError("parameter 'method' error")
         return points
 
@@ -252,7 +238,7 @@ class NNDrawPoints(DrawPointsBase):
 
     def _pointNet(self, i):
         if self.net is None:
-            self.net = PointNet(modelPath="./weights/pointNet.pt", device=self.device)
+            self.net = PointNet(modelPath=self.modelPath, device=self.device)
         return self._predict_pointnet(i, self.net)
 
 
@@ -262,11 +248,25 @@ class NNDrawPoints(DrawPointsBase):
 
 
 if __name__ == "__main__":
-    original_video_path = './yolov8/Video.avi'
-    new_video_path = './data/new_point_img_5.avi'
+    new_video_path = './data/pointNet_k1_epoch400_global.avi'
 
-    dp = NNDrawPoints('./data', original_video_path, device=torch.device("cuda"))
+    dp = NNDrawPoints('./data', modelPath="./weights/pointNet_k1_epoch400_global.pt", device=torch.device("cuda"))
     dp.new_video(new_video_path, 'pointnet')
+    # dp = NaiveDrawPoints(r'H:\dataset\Tracking\YOLO_timestamp\1', True)
+    # dp.new_video(new_video_path, 'none')
 
     # nimgs = './data/point_img/'
     # video2img(new_video_path, nimgs)
+
+    # path = r'H:\dataset\Tracking\YOLO_timestamp'
+    # folders = os.listdir(path)
+    # for folder in folders:
+    #     if "." in folder: continue
+    #     if 10 <= int(folder) <= 16: continue
+    #     files = os.listdir(os.path.join(path, folder))
+    #     if "Point_Video.avi" in files: continue
+    #     print(folder)
+    #     datasetPath = os.path.join(path, folder)
+    #     dp = NaiveDrawPoints(datasetPath, True)
+    #     dp.new_video(os.path.join(path, folder, "Point_Video.avi"), 'none')
+

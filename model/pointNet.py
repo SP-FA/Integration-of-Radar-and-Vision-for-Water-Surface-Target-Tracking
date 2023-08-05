@@ -15,7 +15,7 @@ class PointNet(NetBase):
 
     def _load_data(self, datasetPath):
         dl = NNDatasetLoader(datasetPath)
-        return dl.loadTrainTest(self.cl.batch, 0.95, 1, True, self.D)
+        return dl.loadTrainTest(self.cl.batch, 0.9, self.cl.k, True, self.D)
 
     def _optim(self, lr):
         return optim.Adam(params=self.model.parameters(), lr=lr)

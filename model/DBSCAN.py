@@ -1,10 +1,8 @@
-from collections import Counter
-import numpy as np
 import torch
 
 from model.yoloIter import YOLOIterator
 from tools.algorithm import square_distance
-from tools.stupid_tools import in_box, get_point_box_index
+from tools.stupid_tools import get_point_box_index
 
 
 class DBSCAN:
@@ -12,6 +10,7 @@ class DBSCAN:
         self._distance = None
         self.clusterVisit = None
         self.clusterLabel = None
+        self.boxLabel = None
         self.eps = eps
         self.min_samples = min_samples
 
@@ -21,17 +20,14 @@ class DBSCAN:
         :param X:
         :return:
         """
-        self._distance = square_distance(X, X)
-
+        cnt = 1
         n = X.shape[0]
-        # self.clusterVisit = np.zeros(n)
-        # self.clusterLabel = np.zeros(n)
         self.clusterVisit = torch.zeros(n)
         self.clusterLabel = torch.zeros(n)
-
-        cnt = 1
         for i in range(n):
+            if self.boxLabel is not None and self.boxLabel[i] == 0: continue
             if self.clusterVisit[i] == 1: continue
+            if self._distance is None: self._distance = square_distance(X, X)
             self.clusterVisit[i] = 1
             neighbors = self._region_query(i)
             if len(neighbors) < self.min_samples:
@@ -40,15 +36,14 @@ class DBSCAN:
                 self.clusterLabel[i] = cnt
                 self._expand_cluster(neighbors, cnt)
                 cnt += 1
+        self._distance = None
         self.clusterLabel = self.clusterLabel.long()
         return self.clusterLabel
 
-
     def _region_query(self, i):
         dists = self._distance[i]
-        neighbors = torch.nonzero(dists <= self.eps).squeeze(dim=1)
+        neighbors = torch.nonzero(dists <= self.eps * self.eps).squeeze(dim=1)
         return neighbors
-
 
     def _expand_cluster(self, neighbors, cnt):
         j = 0
@@ -63,102 +58,50 @@ class DBSCAN:
             j += 1
 
 
-class VisionDBSCAN(DBSCAN):
+class ConditionalDBSCAN(DBSCAN):
     INCLUSIVE_THRESHOLD = 0.7
     EXCLUSIVE_THRESHOLD = 0.8
-    cntt = 0
 
     def __init__(self, eps, min_samples):
         super().__init__(eps, min_samples)
-        self.boxLabel = None
         self.xyxy = None
         self.yolo = YOLOIterator("../weights/best.pt")
 
-    def vision_fit(self, X, frame):
-        self.cntt += 1
-        X = torch.tensor(X)
-        self.fit(X)
-        xyxy, cls, id, conf = self.yolo.getBoxes(frame)
+    def conditional_fit(self, X, frame):
+        X = torch.tensor(X, dtype=torch.float32)
+        self.xyxy, cls, id, conf = self.yolo.getBoxes(frame)
         if id is not None:
-            # self.xyxy = xyxy.astype(int)
-            self.xyxy = xyxy.to(torch.int)
             n_samples = X.shape[0]
-            # boxVisit = torch.zeros(n_samples)
-            # boxLabel = torch.zeros(n_samples)
-            # fullBoxId = torch.cat((torch.zeros(1), id))
             boxIdIndices = torch.argsort(id) + 1
-            # boxVisit = np.zeros(n_samples)
-            # boxLabel = np.zeros(n_samples)
-            # fullBoxId = np.concatenate((np.zeros(1), id))
-            # R = in_box(self.xyxy, X)
-            # for i in range(R.shape[0]):
-            #     for j in range(R.shape[1]):
-            #         if boxVisit[j] == 1: continue
-            #         if R[i, j]:
-            #             boxLabel[j] = id[i]
-            #             boxVisit[j] = 1
-
             self.boxLabel = get_point_box_index(boxIdIndices, self.xyxy, X)
-
-            # self.boxLabel = boxLabel.astype(int)
-            # clusterLabelUnq = Counter(self.clusterLabel)
-            # clusterLabelUnq = {int(key): float(value) for key, value in clusterLabelUnq.items()}
+            self.fit(X)
             clusterLabelUnq, clusterLabelCnt = torch.unique(self.clusterLabel, return_counts=True)
-            if clusterLabelUnq[0] != 0: clusterLabelCnt = torch.cat((torch.zeros(1), clusterLabelCnt))
+            if clusterLabelUnq[0] == 0: clusterLabelCnt = clusterLabelCnt[1:]
 
-            n = clusterLabelUnq[-1] + 1
+            n = clusterLabelUnq[-1]
             m = max(boxIdIndices) + 1
-
-            # mat_nm = np.zeros((n, m))
             mat_nm = torch.zeros((n, m), dtype=torch.float32)
             for i in range(n_samples):
-                clusterId = self.clusterLabel[i]
-                boxId = self.boxLabel[i]
-                # mat_nm[clusterId, np.where(fullBoxId == boxId)] += 1
-                mat_nm[clusterId, boxId] += 1
+                if self.clusterLabel[i] == 0: continue
+                cluster = self.clusterLabel[i] - 1
+                box = self.boxLabel[i]
+                mat_nm[cluster, box] += 1
 
             inclusiveLst = []
             for i in range(m):
                 prop = mat_nm[:, i] / clusterLabelCnt
-                prop = prop[1:]
-                # if self.cntt >= 91:
-                #     print(prop)
-                if i == 0: incCluster = torch.nonzero((prop != 1) & (prop >= VisionDBSCAN.EXCLUSIVE_THRESHOLD)) + 1
-                else:      incCluster = torch.nonzero((prop != 1) & (prop >= VisionDBSCAN.INCLUSIVE_THRESHOLD)) + 1
-
+                if i == 0: incCluster = torch.nonzero((prop != 1) & (prop >= ConditionalDBSCAN.EXCLUSIVE_THRESHOLD)) + 1
+                else:      incCluster = torch.nonzero((prop != 1) & (prop >= ConditionalDBSCAN.INCLUSIVE_THRESHOLD)) + 1
                 for j in incCluster: inclusiveLst.append([j, i])
 
-                # for j in range(m):
-                    # prop = mat_nm[i][j] / clusterLabelCnt[i]
-                    # if j == 0 \
-                    #         and prop != 1 \
-                    #         and prop >= VisionDBSCAN.EXCLUSIVE_THRESHOLD:
-                    #     inclusiveLst.append([i, 0])
-                    #     break
-                    # elif j != 0 \
-                    #         and prop != 1 \
-                    #         and prop >= VisionDBSCAN.INCLUSIVE_THRESHOLD:
-                    #     inclusiveLst.append([i, fullBoxId[j]])
-                    #     break
-
-            # idWith0 = torch.cat((torch.zeros(1), id))
             if inclusiveLst:
-                finalLabel = torch.empty(self.boxLabel.shape[0])
-                # inclusiveLst = np.array(inclusiveLst).T
                 inclusiveLst = torch.tensor(inclusiveLst).permute(1, 0)
                 for i in range(n_samples):
-                    clusterId = self.clusterLabel[i]
-                    if clusterId in inclusiveLst[0]:
-                        # self.clusterLabel[i] = inclusiveLst[1, np.where(inclusiveLst[0] == clusterId)]
-                        self.clusterLabel[i] = inclusiveLst[1, torch.nonzero(inclusiveLst[0] == clusterId)]
+                    cluster = self.clusterLabel[i]
+                    if cluster in inclusiveLst[0]:
+                        self.clusterLabel[i] = inclusiveLst[1, torch.nonzero(inclusiveLst[0] == cluster)]
                     else:
                         self.clusterLabel[i] = self.boxLabel[i]
-                # for i in clusterLabelUnq:
-                #     print(finalLabel[self.clusterLabel == i], self.boxLabel[self.clusterLabel == i])
-                #     if i in inclusiveLst[0]:
-                #         finalLabel[self.clusterLabel == i] = inclusiveLst[1, torch.nonzero(inclusiveLst[0] == i)]
-                #     else: finalLabel[self.clusterLabel == i] = self.boxLabel[self.clusterLabel == i]
+                return self.clusterLabel
             else: return self.boxLabel
-        # return self.clusterLabel.astype(int)
-        return self.clusterLabel.long()
-
+        return torch.zeros(X.shape[0])

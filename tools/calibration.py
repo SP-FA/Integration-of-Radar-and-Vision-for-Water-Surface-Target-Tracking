@@ -15,7 +15,7 @@ def project_pcl_to_image(DatasetLoader, i, fixHeight):
     points = DatasetLoader.load3DPoints(i)
     compH = DatasetLoader.loadCompH(i)
     pitch = DatasetLoader.loadPitch(i)
-    extrinsic, intrinsic = DatasetLoader.loadMatrix(i)
+    extrinsic, intrinsic = DatasetLoader.loadMatrix()
 
     if fixHeight is True:
         points = fix_height_calibration(points, compH, pitch)
