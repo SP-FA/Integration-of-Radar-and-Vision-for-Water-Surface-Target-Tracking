@@ -1,4 +1,5 @@
 {
+    "model": "mlp",
     "k": 3,
     "layers": [32, 32, 8],
     "batch_size": 512

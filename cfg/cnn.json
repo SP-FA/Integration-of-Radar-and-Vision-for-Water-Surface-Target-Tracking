@@ -1,0 +1,6 @@
+{
+	"model": "cnn",
+	"k": 1,
+	"batch_size": 512,
+	"max_points": 1500
+}

@@ -6,7 +6,7 @@ from util.load_data import DatasetLoader
 
 
 def show_img(datasetPath=None, i=None):
-    csv = pd.read_csv(path + str(float(filename)) + ".csv")
+    csv = pd.read_csv(path + filename + ".csv")
     try:
         u = csv['u'].tolist()
         v = csv['v'].tolist()
@@ -21,8 +21,8 @@ def show_img(datasetPath=None, i=None):
     w = img.shape[0]
     h = img.shape[1]
     da = 0
-    dx = 0
-    dy = -30
+    dx = -10
+    dy = 0
     scale = 1
     m = cv2.getRotationMatrix2D((w / 2, h / 2), -np.rad2deg(da), scale)  # [2, 3]
 
@@ -39,8 +39,17 @@ def show_img(datasetPath=None, i=None):
     newY = []
     newIndex = []
     for i in range(len(y)):
-        # if y[i] > 570:
-        #     y[i] += -220
+        if x[i] < 650:
+            y[i] += 0
+        #     x[i] += 20
+        if 1090 > x[i] > 920:
+            y[i] += 0
+        if 1010 > x[i] > 920:
+            y[i] += -20
+        if 1210 < x[i]:
+            x[i] += 30
+        if x[i] < 920:
+            y[i] += 20
         if x[i] > 850:
             newX.append(x[i])
             newY.append(y[i])
@@ -55,7 +64,7 @@ def show_img(datasetPath=None, i=None):
 
     for k, i in enumerate(newIndex):
         x[i] = x_[k] + 0
-        y[i] = y_[k] + 30
+        y[i] = y_[k] + 0
         # if y[i] > 570:
         #     y[i] += 0
         # elif x[i] > 1120:
@@ -69,8 +78,8 @@ def show_img(datasetPath=None, i=None):
         # if y[i] > 460: y[i] -= 80
 
     # for i in range(len(y)):
-    #     if y[i] > 710:
-    #         y[i] += -220
+    #     if x[i] < 1740 and y[i] > 820:
+    #         y[i] += -140
     #
     # for i in range(len(y)):
     #     if y[i] > 555 and x[i] > 590:
@@ -99,7 +108,7 @@ def show_img(datasetPath=None, i=None):
 
 
 def save_label(x, y):
-    csv = pd.read_csv(path + str(float(filename)) + ".csv")
+    csv = pd.read_csv(path + filename + ".csv")
     for i in range(csv.shape[0]):
         csv.loc[i, 'u'] = x[i]
         csv.loc[i, 'v'] = y[i]
@@ -108,13 +117,13 @@ def save_label(x, y):
 
 
 if __name__ == "__main__":
-    datasetPath = r"H:\dataset\Tracking\YOLO_timestamp\44"
-    path = r"H:\dataset\Tracking\YOLO_timestamp\44/radar/"
-    labelPath = r"H:\dataset\Tracking\YOLO_timestamp\44\point_label/"
+    datasetPath = r"H:\dataset\Tracking\YOLO_timestamp\55"
+    path = r"H:\dataset\Tracking\YOLO_timestamp\55/radar/"
+    labelPath = r"H:\dataset\Tracking\YOLO_timestamp\55\point_label/"
     deltaU = 0
     deltaV = 0
-    filename = "1669621580.75920"  # up
-    imgPath = r"H:\dataset\Tracking\YOLO_timestamp\44\images/"
+    filename = "1670045893.97801"  # up
+    imgPath = r"H:\dataset\Tracking\YOLO_timestamp\55\images/"
 
-    x, y = show_img(datasetPath, i=296)
+    x, y = show_img(datasetPath, i=60)
     save_label(x, y)

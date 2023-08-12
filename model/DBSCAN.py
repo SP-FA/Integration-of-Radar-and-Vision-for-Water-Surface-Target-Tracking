@@ -1,6 +1,6 @@
 import torch
 
-from model.yoloIter import YOLOIterator
+from model.union import DisjointSetUnion
 from tools.algorithm import square_distance
 from tools.stupid_tools import get_point_box_index
 
@@ -59,24 +59,24 @@ class DBSCAN:
 
 
 class ConditionalDBSCAN(DBSCAN):
-    INCLUSIVE_THRESHOLD = 0.7
+    INCLUSIVE_THRESHOLD = 0.6
     EXCLUSIVE_THRESHOLD = 0.8
 
     def __init__(self, eps, min_samples):
         super().__init__(eps, min_samples)
-        self.xyxy = None
-        self.yolo = YOLOIterator("../weights/best.pt")
 
-    def conditional_fit(self, X, frame):
+    def conditional_fit(self, X, id, xyxy):
         X = torch.tensor(X, dtype=torch.float32)
-        self.xyxy, cls, id, conf = self.yolo.getBoxes(frame)
         if id is not None:
             n_samples = X.shape[0]
             boxIdIndices = torch.argsort(id) + 1
-            self.boxLabel = get_point_box_index(boxIdIndices, self.xyxy, X)
+            self.boxLabel = get_point_box_index(boxIdIndices, xyxy, X)
             self.fit(X)
             clusterLabelUnq, clusterLabelCnt = torch.unique(self.clusterLabel, return_counts=True)
             if clusterLabelUnq[0] == 0: clusterLabelCnt = clusterLabelCnt[1:]
+            else: clusterLabelUnq = torch.cat((torch.tensor([0]), clusterLabelUnq), dim=0)
+
+            dsu = DisjointSetUnion(clusterLabelUnq)
 
             n = clusterLabelUnq[-1]
             m = max(boxIdIndices) + 1
@@ -87,21 +87,18 @@ class ConditionalDBSCAN(DBSCAN):
                 box = self.boxLabel[i]
                 mat_nm[cluster, box] += 1
 
-            inclusiveLst = []
             for i in range(m):
                 prop = mat_nm[:, i] / clusterLabelCnt
-                if i == 0: incCluster = torch.nonzero((prop != 1) & (prop >= ConditionalDBSCAN.EXCLUSIVE_THRESHOLD)) + 1
-                else:      incCluster = torch.nonzero((prop != 1) & (prop >= ConditionalDBSCAN.INCLUSIVE_THRESHOLD)) + 1
-                for j in incCluster: inclusiveLst.append([j, i])
+                if i == 0: incCluster = torch.nonzero(prop >= ConditionalDBSCAN.EXCLUSIVE_THRESHOLD) + 1
+                else:      incCluster = torch.nonzero(prop >= ConditionalDBSCAN.INCLUSIVE_THRESHOLD) + 1
+                for j in incCluster: dsu.union(i, j)
 
-            if inclusiveLst:
-                inclusiveLst = torch.tensor(inclusiveLst).permute(1, 0)
+            if dsu.unioned:
                 for i in range(n_samples):
-                    cluster = self.clusterLabel[i]
-                    if cluster in inclusiveLst[0]:
-                        self.clusterLabel[i] = inclusiveLst[1, torch.nonzero(inclusiveLst[0] == cluster)]
-                    else:
-                        self.clusterLabel[i] = self.boxLabel[i]
+                    label = dsu.find(self.clusterLabel[i])
+                    if label is False:
+                        label = self.boxLabel[i]
+                    self.clusterLabel[i] = label
                 return self.clusterLabel
             else: return self.boxLabel
         return torch.zeros(X.shape[0])

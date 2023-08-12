@@ -1,5 +1,5 @@
 import torch
-from model.networks import MLP
+from model.cnn import MLP
 from model.pointNet import PointNet
 
 if __name__ == "__main__":

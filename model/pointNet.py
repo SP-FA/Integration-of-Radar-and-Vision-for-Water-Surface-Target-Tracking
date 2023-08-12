@@ -2,20 +2,20 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 
-from model.NetBase import NetBase
+from model.netBase import NetBase
 from tools.algorithm import feature_trans_regularizer
 from util.load_data import NNDatasetLoader
 
 
 class PointNet(NetBase):
     def __init__(self, **kwargs):
-        super().__init__(kwargs)
+        super().__init__(**kwargs)
         if "modelPath" in kwargs: self.model = torch.load(kwargs["modelPath"])
         else: self.model = PointNetSeg(self.input_dim, self.output_dim, self.cl.globalFeature, self.cl.useFeatureTrans, self.D)
 
     def _load_data(self, datasetPath):
         dl = NNDatasetLoader(datasetPath)
-        return dl.loadTrainTest(self.cl.batch, 0.9, self.cl.k, True, self.D)
+        return dl.loadTrainTest(self.cl.batch, 0.9, self.cl.k, padding=True, maxPoints=self.cl.maxPoints, device=self.D)
 
     def _optim(self, lr):
         return optim.Adam(params=self.model.parameters(), lr=lr)

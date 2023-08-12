@@ -6,7 +6,7 @@ import torch
 
 
 class NetBase(ABC):
-    def __init__(self, kwargs):
+    def __init__(self, **kwargs):
         if "config" in kwargs: self.cl = ConfigureLoader(kwargs["config"])
         if "device" in kwargs: self.D = kwargs["device"]
         self.model = None

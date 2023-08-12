@@ -21,8 +21,6 @@ def getIndex(arr, point):
 
 
 class DatasetLoader:
-    _maxPoints = 500
-
     def __init__(self, datasetPath):
         self._path = datasetPath
         self._csvList = None
@@ -53,6 +51,24 @@ class DatasetLoader:
             return pd.read_csv(os.path.join(self._path, name, frame), index_col=0)
         else:
             return pd.read_csv(os.path.join(self._path, name, i), index_col=0)
+
+
+    def changeCSV(self, name, i, **kwargs):
+        if isinstance(i, int):
+            frame = self.csv[i]
+            df = pd.read_csv(os.path.join(self._path, name, frame), index_col=0)
+            for key in kwargs: df[key] = kwargs[key]
+            df.to_csv(os.path.join(self._path, name, frame))
+        else:
+            df = pd.read_csv(os.path.join(self._path, name, i), index_col=0)
+            for key in kwargs: df[key] = kwargs[key]
+            df.to_csv(os.path.join(self._path, name, i))
+
+
+    # def newCSV(self, path, i, **kwargs):
+    #     if isinstance(i, int)
+    #         frame = self.csv[i]
+    #         df = pd.read_csv(os.path.join(self._path, name, frame), index_col=0)
 
 
     def load3DPoints(self, i):
@@ -166,18 +182,18 @@ class NNDatasetLoader(DatasetLoader):
         return datax
 
 
-    def _padding_frames(self, data):
+    def _padding_frames(self, data, maxPoints):
         """
         把这一帧的点云数量 padding 到 self._maxPoints
         :param data: 要 padding 的点云数据
         :return: [maxPoints, input_dim], ndarray
         """
-        if data.shape[0] < self._maxPoints:
-            diff = self._maxPoints - data.shape[0]
+        if data.shape[0] < maxPoints:
+            diff = maxPoints - data.shape[0]
             zeros = np.zeros([diff, data.shape[1]])
             data = np.concatenate((data, zeros), axis=0)
-        if data.shape[0] > self._maxPoints:
-            data = data[:self._maxPoints]
+        if data.shape[0] > maxPoints:
+            data = data[:maxPoints]
         return data
 
 
@@ -213,7 +229,7 @@ class NNDatasetLoader(DatasetLoader):
         return torch.tensor(data_y).to(torch.float32).to(device)
 
 
-    def _frameX(self, isValid=False, padding=False, device=torch.device("cpu")):
+    def _frameX(self, isValid=False, padding=False, maxPoints=1000, device=torch.device("cpu")):
         """
         :param isValid: 如果是训练模式，就选取标注过的数据，如果是验证模式，则选取所有数据
         :param padding: 是否进行 padding
@@ -227,7 +243,7 @@ class NNDatasetLoader(DatasetLoader):
             radarcsv = self.loadCSV(RADAR, i)
             imucsv = self.loadCSV(IMU, i)
             datax = self._get_features(radarcsv, imucsv)
-            datax = self._padding_frames(datax) if padding else torch.tensor(datax).to(torch.float32).to(device)
+            datax = self._padding_frames(datax, maxPoints) if padding else torch.tensor(datax).to(torch.float32).to(device)
             data_x.append(datax)
             # prog.update(pbar, description=desc, advance=1)
         if padding:
@@ -237,14 +253,14 @@ class NNDatasetLoader(DatasetLoader):
             return data_x
 
 
-    def _frameY(self, isValid=False, padding=False, device=torch.device("cpu")):
+    def _frameY(self, isValid=False, padding=False, maxPoints=1000, device=torch.device("cpu")):
         data_y = []
         csv = self.csv if isValid else os.listdir(self._labelPath)
         for i in csv:
             labelcsv = self.loadCSV(LABEL, i)
             v = labelcsv["v"].tolist()
             datay = np.array([v]).T  # [m, 1]
-            datay = self._padding_frames(datay) if padding else torch.tensor(datay).to(device)
+            datay = self._padding_frames(datay, maxPoints) if padding else torch.tensor(datay).to(device)
             data_y.append(datay)
         if padding:
             data_y = np.array(data_y)
@@ -253,12 +269,12 @@ class NNDatasetLoader(DatasetLoader):
             return data_y
 
 
-    def loadTrainTest(self, batch=218, sep=0.9, k=5, padding=False, device=torch.device("cpu")):
+    def loadTrainTest(self, batch=218, sep=0.9, k=5, padding=False, maxPoints=1000, device=torch.device("cpu")):
         self._k = k
         if padding is True:
-            data_x = self._frameX(False, padding, device)
+            data_x = self._frameX(False, padding, maxPoints, device)
             data_x = data_x.permute(0, 2, 1)  # 卷积层第二维是 channel
-            data_y = self._frameY(False, padding, device)
+            data_y = self._frameY(False, padding, maxPoints, device)
         else:
             data_x = self._dataX(device)
             data_y = self._dataY(device)
@@ -268,25 +284,27 @@ class NNDatasetLoader(DatasetLoader):
         test_size = len(data_dataset) - train_size
         train_data, test_data = random_split(data_dataset, [train_size, test_size])
         trainSet = DataLoader(train_data, batch_size=batch)
-        testSet = DataLoader(test_data, batch_size=batch)
+        testSet  = DataLoader(test_data , batch_size=batch)
         return trainSet, testSet
 
 
-    def loadValid(self, padding=False, k=5, device=torch.device("cpu")):
+    def loadValid(self, padding=False, maxPoints=1000, k=5, device=torch.device("cpu")):
         self._k = k
-        valid = self._frameX(True, padding, device)
+        valid = self._frameX(True, padding, maxPoints, device)
         if padding:
             valid = valid.permute(0, 2, 1)
             valid = torch.unsqueeze(valid, dim=1)
         us = []
+        rawLength = []
         csv = self.csv
         for i in csv:
             radarcsv = self.loadCSV(RADAR, i)
             u = radarcsv["u"].tolist()  # [1, m]
+            rawLength.append(len(u))
             if padding:
-                if len(u) < self._maxPoints:
-                    u.extend([0 for i in range(self._maxPoints - len(u))])
-                if len(u) > self._maxPoints:
-                    u = u[:self._maxPoints]
+                if len(u) < maxPoints:
+                    u.extend([0 for i in range(maxPoints - len(u))])
+                if len(u) > maxPoints:
+                    u = u[:maxPoints]
             us.append(u)
-        return valid, us  # [nframe, m, 20], [nframe, m]
+        return valid, us, rawLength  # [nframe, m, 20], [nframe, m], [nframe]
