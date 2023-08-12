@@ -1,11 +1,11 @@
 data/*
-weights/*
-doc/*
-yolov8/
-point_calib_dataset/*
-WaterScenes-dev/*
-__pycache__/*
-*/__pycache__/*
+point_cloud_calibration/weights/*
+point_cloud_calibration/doc/*
+point_cloud_calibration/point_calib_dataset/*
+point_cloud_calibration/util/__pycache__/*
+point_cloud_calibration/tools/__pycache__/*
+point_cloud_calibration/model/__pycache__/*
+point_cloud_calibration/__pycache__/*
 
 *.avi
 *.jpg
