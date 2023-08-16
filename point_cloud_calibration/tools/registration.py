@@ -2,7 +2,7 @@ import numpy as np
 import cv2 as cv
 import open3d as o3d
 
-from tools.algorithm import affine
+from point_cloud_calibration.tools.algorithm import affine
 
 
 def image_registration(points, frame, lastFrame):

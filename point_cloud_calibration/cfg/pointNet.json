@@ -1,8 +1,8 @@
 {
 	"model": "pointNet",
 	"k": 1,
-	"batch_size": 200,
+	"batch_size": 128,
 	"global_feature": false,
 	"use_feature_trans": true,
-	"max_points": 1500
+	"max_points": 500
 }

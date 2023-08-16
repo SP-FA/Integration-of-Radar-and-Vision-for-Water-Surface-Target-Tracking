@@ -1,8 +1,8 @@
 import torch
 
-from model.union import DisjointSetUnion
-from tools.algorithm import square_distance
-from tools.stupid_tools import get_point_box_index
+from point_cloud_calibration.model.union import DisjointSetUnion
+from point_cloud_calibration.tools.algorithm import square_distance
+from point_cloud_calibration.tools.stupid_tools import get_point_box_index
 
 
 class DBSCAN:

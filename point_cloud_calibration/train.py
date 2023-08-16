@@ -1,9 +1,10 @@
 import torch
-from model.cnn import MLP
+from model.cnn import CNN
+from model.mlp import MLP
 from model.pointNet import PointNet
 
 if __name__ == "__main__":
-    epoch = 400
+    epoch = 150
     device = torch.device("cuda")
 
     # k=1 [19, 32, 32, 8, 1]
@@ -20,5 +21,5 @@ if __name__ == "__main__":
     # model.train("./data", epoch, "./weights/pointNet_k3_epoch400.pt", "pointNet_k3_epoch400.jpg")
     # model.train("./data", epoch, "./weights/pointNet_k5_epoch400.pt", "pointNet_k5_epoch400.jpg")
 
-    model.train("./point_calib_dataset", epoch, "./weights/pointNet_k1_epoch400_global.pt", "pointNet_k1_epoch400_global.jpg")
+    model.train("./point_calib_dataset", epoch, "./weights/pointNet_k1_epoch150_global.pt", "pointNet_k1_epoch150_global.jpg")
 
